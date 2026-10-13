@@ -50,12 +50,12 @@ func List(input []byte) {
 		// 	fmt.Printf("%d -> %s\n", i, proc)
 		// }
 		//
-		data := Proc{
+		proc := Proc{
 			PID:  pid,
 			Name: string(fields[0]),
 			Addr: fields[8],
 		}
-		procs = append(procs, data)
+		procs = append(procs, proc)
 
 	}
 

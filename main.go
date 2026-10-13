@@ -8,6 +8,7 @@ import (
 )
 
 type Proc struct {
+	PID  int
 	Name string
 	Addr string
 }
@@ -32,7 +33,7 @@ func List(input []byte) {
 	result := string(input)
 	lines := strings.Split(result, "\n")
 
-	procs := map[int]Proc{}
+	var procs []Proc
 
 	for _, line := range lines {
 		fields := strings.Fields(line)
@@ -48,14 +49,17 @@ func List(input []byte) {
 		// for i, proc := range fields {
 		// 	fmt.Printf("%d -> %s\n", i, proc)
 		// }
-		p := procs[pid]
-		p.Name = string(fields[0])
-		p.Addr = fields[8]
-		procs[pid] = p
+		//
+		data := Proc{
+			PID:  pid,
+			Name: string(fields[0]),
+			Addr: fields[8],
+		}
+		procs = append(procs, data)
 
 	}
 
-	for pid, p := range procs {
-		fmt.Printf("%d -> %s %s\n", pid, p.Name, p.Addr)
+	for _, p := range procs {
+		fmt.Printf("%d -> %s %s\n", p.PID, p.Name, p.Addr)
 	}
 }

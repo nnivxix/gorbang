@@ -107,7 +107,18 @@ func initModel() model {
 		table.WithHeight(15),
 		table.WithFocused(true),
 	)
-	// s := table.DefaultStyles()
+	s := table.DefaultStyles()
+	s.Header = s.Header.
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		BorderBottom(true).
+		Bold(true)
+	s.Selected = s.Selected.
+		Foreground(lipgloss.Color("229")).
+		Background(lipgloss.Color("27")). // blue
+		Bold(false)
+	t.SetStyles(s)
+
 	return model{table: t, err: nil}
 
 }

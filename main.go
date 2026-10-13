@@ -5,6 +5,10 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"charm.land/bubbles/v2/table"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 type Proc struct {
@@ -12,25 +16,27 @@ type Proc struct {
 	Name string
 	Addr string
 }
+type Column struct {
+	Title string
+	Width int
+}
+type Row []string
 
-func main() {
-	commandLsf := `lsof -nP -iTCP -sTCP:LISTEN | grep -E '127\.0\.0\.1|\[::1\]'`
-
-	cmd := exec.Command("bash", "-c", commandLsf)
-
-	output, err := cmd.Output()
-
-	if err != nil {
-		fmt.Println("Error outputing result", err)
-		return
-	}
-
-	List(output)
-
+type model struct {
+	table table.Model
+	err   error
 }
 
-func List(input []byte) {
-	result := string(input)
+func main() {
+	p := tea.NewProgram(initModel())
+	if _, err := p.Run(); err != nil {
+		panic(err)
+	}
+}
+
+func listProcs() []Proc {
+	output, _ := loadProcs()
+	result := string(output)
 	lines := strings.Split(result, "\n")
 
 	var procs []Proc
@@ -59,7 +65,94 @@ func List(input []byte) {
 
 	}
 
-	for _, p := range procs {
-		fmt.Printf("%d -> %s %s\n", p.PID, p.Name, p.Addr)
+	return procs
+}
+
+func loadProcs() ([]byte, error) {
+	commandLsf := `lsof -nP -iTCP -sTCP:LISTEN | grep -E '127\.0\.0\.1|\[::1\]'`
+
+	cmd := exec.Command("bash", "-c", commandLsf)
+
+	output, err := cmd.Output()
+
+	if err != nil {
+		fmt.Println("Error outputing result", err)
+		return nil, err
 	}
+
+	return output, nil
+}
+
+func initModel() model {
+	procs := listProcs()
+
+	columns := []table.Column{
+		{Title: "PID", Width: 8},
+		{Title: "NAME", Width: 20},
+		{Title: "ADDR", Width: 24},
+	}
+
+	rows := make([]table.Row, 0, len(procs))
+	for _, p := range procs {
+		rows = append(rows, table.Row{
+			strconv.Itoa(p.PID),
+			p.Name,
+			p.Addr,
+		})
+	}
+
+	t := table.New(
+		table.WithColumns(columns),
+		table.WithRows(rows),
+		table.WithHeight(15),
+		table.WithFocused(true),
+	)
+	// s := table.DefaultStyles()
+	return model{table: t, err: nil}
+
+}
+
+func (m model) Init() tea.Cmd {
+	return nil
+}
+
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		h := msg.Height - 6
+		if h < 1 {
+			h = 1
+		}
+		m.table.SetWidth(msg.Width)
+		m.table.SetHeight(h)
+
+	case tea.KeyPressMsg:
+		switch msg.String() {
+		case "ctrl+c", "q", "esc":
+			return m, tea.Quit
+		}
+	}
+
+	m.table, cmd = m.table.Update(msg)
+	return m, cmd
+}
+
+func (m model) View() tea.View {
+	if m.err != nil {
+		v := tea.NewView("Gorbang Error, press q to quit")
+
+		v.AltScreen = true
+		return v
+	}
+	title := lipgloss.NewStyle().Bold(true).Render("Gorbang - Listening ports")
+	body := lipgloss.NewStyle().
+		BorderStyle(lipgloss.NormalBorder()).
+		Render(m.table.View())
+
+	v := tea.NewView(title + "\n\n" + body + "\n\n")
+	v.AltScreen = true
+
+	return v
 }

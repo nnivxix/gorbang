@@ -164,7 +164,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "y", "enter":
 				m.confirming = false
 				return m, killProc(m.targetPID)
-			case "n", "esc", "q":
+			default:
 				m.confirming = false
 				return m, nil
 			}
@@ -206,7 +206,7 @@ func (m model) View() tea.View {
 		Render(m.table.View())
 	footer := ""
 	if m.confirming {
-		footer = fmt.Sprintf("\n Kill %s (PID %d)? [y] yes [n] no", m.targetName, m.targetPID)
+		footer = fmt.Sprintf("\n Kill %s (PID %d)? [y] yes", m.targetName, m.targetPID)
 	}
 
 	v := tea.NewView(title + "\n\n" + body + "\n\n" + footer)

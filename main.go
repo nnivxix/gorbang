@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/table"
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
@@ -32,6 +33,9 @@ type model struct {
 	confirming bool
 	targetPID  int
 	targetName string
+	search     textinput.Model
+	searching  bool
+	rows       []table.Row
 }
 
 func main() {
@@ -126,7 +130,13 @@ func initModel() model {
 		Bold(false)
 	t.SetStyles(s)
 
-	return model{table: t, err: nil}
+	search := textinput.New()
+
+	search.Placeholder = "Search port / name / PID"
+	search.Prompt = " / "
+	search.CharLimit = 64
+
+	return model{table: t, err: nil, search: search, rows: rows}
 
 }
 
@@ -148,7 +158,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				p.Addr,
 			})
 		}
-		m.table.SetRows(rows)
+		m.rows = rows
+		m.table.SetRows(filterRows(rows, m.search.Value()))
+		m.table.SetCursor(0)
+
 		return m, nil
 	case tea.WindowSizeMsg:
 		h := msg.Height - 10
@@ -169,6 +182,34 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
+
+		if m.searching {
+			switch msg.String() {
+			case "esc":
+				m.searching = false
+				m.search.Reset()
+				m.search.Blur()
+				m.table.SetRows(m.rows)
+				m.table.SetCursor(0)
+				m.table.Focus()
+
+				return m, nil
+			case "enter":
+				m.searching = true
+				m.search.Blur()
+				m.table.Focus()
+
+				return m, nil
+			}
+
+			var scmd tea.Cmd
+			m.search, scmd = m.search.Update(msg)
+			m.table.SetRows(filterRows(m.rows, m.search.Value()))
+			m.table.SetCursor(0)
+
+			return m, scmd
+		}
+
 		switch msg.String() {
 		case "enter":
 			row := m.table.SelectedRow()
@@ -185,7 +226,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.targetPID = pid
 			m.targetName = row[1]
 			return m, nil
-
+		case "/":
+			m.searching = true
+			m.table.Blur()
+			return m, m.search.Focus()
 		}
 	}
 
@@ -205,8 +249,12 @@ func (m model) View() tea.View {
 		BorderStyle(lipgloss.NormalBorder()).
 		Render(m.table.View())
 	footer := ""
-	if m.confirming {
+
+	switch {
+	case m.confirming:
 		footer = fmt.Sprintf("\n Kill %s (PID %d)? [y] yes", m.targetName, m.targetPID)
+	case m.searching:
+		footer = fmt.Sprintf("Search for: /%s", m.search.Value()+" ")
 	}
 
 	v := tea.NewView(title + "\n\n" + body + "\n\n" + footer)
@@ -215,7 +263,7 @@ func (m model) View() tea.View {
 	return v
 }
 
-func Log() (*slog.Logger, *os.File, error) {
+func log() (*slog.Logger, *os.File, error) {
 	file, err := os.OpenFile(
 		"logger.log",
 		os.O_APPEND|os.O_CREATE|os.O_WRONLY,
@@ -236,4 +284,26 @@ func killProc(pid int) tea.Cmd {
 		_ = exec.Command("kill", strconv.Itoa(pid)).Run()
 		return procsReloadedMsg{}
 	}
+}
+
+func filterRows(rows []table.Row, query string) []table.Row {
+	q := strings.ToLower(strings.TrimSpace(query))
+
+	if q == "" {
+		return rows
+	}
+
+	filtered := make([]table.Row, 0, len(rows))
+
+	for _, r := range rows {
+		for _, cell := range r {
+			value := strings.ToLower(cell)
+			if strings.Contains(value, q) {
+				filtered = append(filtered, r)
+				break
+			}
+		}
+	}
+
+	return filtered
 }

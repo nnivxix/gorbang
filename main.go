@@ -1,7 +1,7 @@
 package main
 
-import (
-	"fmt"
+	"log/slog"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -127,8 +127,12 @@ func (m model) Init() tea.Cmd {
 	return nil
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
+	logger, file, err := Log()
+
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -141,8 +145,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		switch msg.String() {
-		case "ctrl+c", "q", "esc":
-			return m, tea.Quit
+		case "enter":
+			row := m.table.SelectedRow()
+			logger.Info("row", row)
+			return m, nil
+
 		}
 	}
 
@@ -165,5 +172,20 @@ func (m model) View() tea.View {
 	v := tea.NewView(title + "\n\n" + body + "\n\n")
 	v.AltScreen = true
 
-	return v
+
+
+func Log() (*slog.Logger, *os.File, error) {
+	file, err := os.OpenFile(
+		"logger.log",
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY,
+		0644,
+	)
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	logger := slog.New(slog.NewTextHandler(file, nil))
+
+	return logger, file, nil
 }

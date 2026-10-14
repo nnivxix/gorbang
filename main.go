@@ -1,5 +1,7 @@
 package main
 
+import (
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -127,6 +129,8 @@ func (m model) Init() tea.Cmd {
 	return nil
 }
 
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
 	logger, file, err := Log()
 
 	if err != nil {
@@ -148,6 +152,9 @@ func (m model) Init() tea.Cmd {
 		case "enter":
 			row := m.table.SelectedRow()
 			logger.Info("row", row)
+
+			// m.confirmPID, _ = strconv.Atoi(row[0])
+
 			return m, nil
 
 		}
@@ -172,7 +179,8 @@ func (m model) View() tea.View {
 	v := tea.NewView(title + "\n\n" + body + "\n\n")
 	v.AltScreen = true
 
-
+	return v
+}
 
 func Log() (*slog.Logger, *os.File, error) {
 	file, err := os.OpenFile(

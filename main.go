@@ -24,9 +24,14 @@ type Column struct {
 }
 type Row []string
 
+type procsReloadedMsg struct{}
+
 type model struct {
-	table table.Model
-	err   error
+	table      table.Model
+	err        error
+	confirming bool
+	targetPID  int
+	targetName string
 }
 
 func main() {
@@ -71,7 +76,7 @@ func listProcs() []Proc {
 }
 
 func loadProcs() ([]byte, error) {
-	commandLsf := `lsof -nP -iTCP -sTCP:LISTEN | grep -E '127\.0\.0\.1|\[::1\]'`
+	commandLsf := `lsof -nP -iTCP -sTCP:LISTEN | grep -E '127\.0\.0\.1|\[::1\]|\*:'`
 
 	cmd := exec.Command("bash", "-c", commandLsf)
 
@@ -131,16 +136,22 @@ func (m model) Init() tea.Cmd {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
-	logger, file, err := Log()
-
-	if err != nil {
-		panic(err)
-	}
-	defer file.Close()
 
 	switch msg := msg.(type) {
+	case procsReloadedMsg:
+		procs := listProcs()
+		rows := make([]table.Row, 0, len(procs))
+		for _, p := range procs {
+			rows = append(rows, table.Row{
+				strconv.Itoa(p.PID),
+				p.Name,
+				p.Addr,
+			})
+		}
+		m.table.SetRows(rows)
+		return m, nil
 	case tea.WindowSizeMsg:
-		h := msg.Height - 6
+		h := msg.Height - 10
 		if h < 1 {
 			h = 1
 		}
@@ -148,13 +159,31 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.table.SetHeight(h)
 
 	case tea.KeyPressMsg:
+		if m.confirming {
+			switch msg.String() {
+			case "y", "enter":
+				m.confirming = false
+				return m, killProc(m.targetPID)
+			case "n", "esc", "q":
+				m.confirming = false
+				return m, nil
+			}
+		}
 		switch msg.String() {
 		case "enter":
 			row := m.table.SelectedRow()
-			logger.Info("row", row)
+			if row == nil {
+				return m, nil
+			}
 
-			// m.confirmPID, _ = strconv.Atoi(row[0])
+			pid, err := strconv.Atoi(row[0])
+			if err != nil {
+				return m, nil
+			}
 
+			m.confirming = true
+			m.targetPID = pid
+			m.targetName = row[1]
 			return m, nil
 
 		}
@@ -175,8 +204,12 @@ func (m model) View() tea.View {
 	body := lipgloss.NewStyle().
 		BorderStyle(lipgloss.NormalBorder()).
 		Render(m.table.View())
+	footer := ""
+	if m.confirming {
+		footer = fmt.Sprintf("\n Kill %s (PID %d)? [y] yes [n] no", m.targetName, m.targetPID)
+	}
 
-	v := tea.NewView(title + "\n\n" + body + "\n\n")
+	v := tea.NewView(title + "\n\n" + body + "\n\n" + footer)
 	v.AltScreen = true
 
 	return v
@@ -196,4 +229,11 @@ func Log() (*slog.Logger, *os.File, error) {
 	logger := slog.New(slog.NewTextHandler(file, nil))
 
 	return logger, file, nil
+}
+
+func killProc(pid int) tea.Cmd {
+	return func() tea.Msg {
+		_ = exec.Command("kill", strconv.Itoa(pid)).Run()
+		return procsReloadedMsg{}
+	}
 }

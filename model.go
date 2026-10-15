@@ -183,6 +183,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.search.Focus()
 		case "q", "esc":
 			return m, tea.Quit
+		case "r":
+			procs := listProcs()
+			rows := procsToRows(procs)
+			m.rows = rows
+			m.table.SetRows(filterRows(rows, m.search.Value()))
+
+			return m, nil
+
 		}
 	}
 
@@ -205,9 +213,11 @@ func (m model) View() tea.View {
 
 	switch {
 	case m.confirming:
-		footer = fmt.Sprintf("\n Kill %s (PID %d)? [y] yes", m.targetName, m.targetPID)
+		footer = fmt.Sprintf("\n Kill %s (PID %d)? [y] Yes", m.targetName, m.targetPID)
 	case m.searching:
-		footer = fmt.Sprintf("Search for: %s\npress [ESC] to exit searching mode", m.search.Value()+" ")
+		footer = fmt.Sprintf("Search: %s\nPress [ESC] to exit search mode", m.search.Value()+" ")
+	default:
+		footer = "[R] Refresh\n[/] Search process\n[ESC, Q] Quit"
 	}
 
 	v := tea.NewView(title + "\n\n" + body + "\n\n" + footer)

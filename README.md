@@ -27,6 +27,13 @@ down that "port already in use" process and kill it without leaving the terminal
 brew install nnivxix/tap/gorbang
 ```
 
+or
+
+```sh
+brew tap nnivxix/tap
+brew install gorbang
+```
+
 ### Build from source
 
 Prerequisites: Go 1.27+ and `lsof` (preinstalled on macOS and most Linux distros).

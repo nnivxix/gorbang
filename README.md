@@ -23,8 +23,6 @@ down that "port already in use" process and kill it without leaving the terminal
 
 ### Homebrew
 
-> Coming soon — the tap is not published yet.
-
 ```sh
 brew install nnivxix/tap/gorbang
 ```

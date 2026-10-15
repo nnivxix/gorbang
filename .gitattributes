@@ -1,0 +1,2 @@
+# Keep demo assets in the repo but out of release/source archives
+/assets/** export-ignore

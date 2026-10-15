@@ -195,9 +195,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				return m, nil
 			case "enter":
-				m.searching = true
-				m.search.Blur()
-				m.table.Focus()
+				m.searching = false
+				m.search = textinput.New()
+				row := m.table.SelectedRow()
+				if row == nil {
+					return m, nil
+				}
+
+				pid, err := strconv.Atoi(row[0])
+				if err != nil {
+					return m, nil
+				}
+
+				m.confirming = true
+				m.targetPID = pid
+				m.targetName = row[1]
 
 				return m, nil
 			}

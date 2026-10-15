@@ -176,9 +176,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "y", "enter":
 				m.confirming = false
+				m.table.Focus()
 				return m, killProc(m.targetPID)
+			case "up":
+				m.table.MoveUp(1)
+				return m, nil
+			case "down":
+				m.table.MoveDown(1)
+				return m, nil
 			default:
 				m.confirming = false
+				m.searching = false
 				return m, nil
 			}
 		}
@@ -195,8 +203,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				return m, nil
 			case "enter":
+				// reset after kill processes
 				m.searching = false
+				m.search.Blur()
+				m.search.Reset()
+				m.table.Focus()
 				m.search = textinput.New()
+
 				row := m.table.SelectedRow()
 				if row == nil {
 					return m, nil
@@ -211,6 +224,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.targetPID = pid
 				m.targetName = row[1]
 
+				return m, nil
+
+			case "up":
+				m.table.MoveUp(1)
+				return m, nil
+			case "down":
+				m.table.MoveDown(1)
 				return m, nil
 			}
 
@@ -242,6 +262,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.searching = true
 			m.table.Blur()
 			return m, m.search.Focus()
+		case "q", "esc":
+			return m, tea.Quit
 		}
 	}
 
@@ -266,7 +288,7 @@ func (m model) View() tea.View {
 	case m.confirming:
 		footer = fmt.Sprintf("\n Kill %s (PID %d)? [y] yes", m.targetName, m.targetPID)
 	case m.searching:
-		footer = fmt.Sprintf("Search for: /%s", m.search.Value()+" ")
+		footer = fmt.Sprintf("Search for: %s\npress [ESC] to exit searching mode", m.search.Value()+" ")
 	}
 
 	v := tea.NewView(title + "\n\n" + body + "\n\n" + footer)

@@ -95,21 +95,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, killProc(m.targetPID)
 			case "up":
 				m.confirming = false
+				m.table.MoveUp(1)
 				if m.searching == false {
 					m.searching = true
 					m.table.Blur()
 					return m, m.search.Focus()
 				}
-				m.table.MoveUp(1)
 				return m, nil
 			case "down":
 				m.confirming = false
+				m.table.MoveDown(1)
 				if m.searching == false {
 					m.searching = true
 					m.table.Blur()
 					return m, m.search.Focus()
 				}
-				m.table.MoveDown(1)
 				return m, nil
 			default:
 				m.confirming = false
@@ -130,13 +130,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				return m, nil
 			case "enter":
-				// reset after kill processes
-				m.searching = false
-				m.search.Blur()
-				m.search.Reset()
-				m.table.Focus()
-				m.search = textinput.New()
-
 				row := m.table.SelectedRow()
 				if row == nil {
 					return m, nil
@@ -152,7 +145,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.targetName = row[1]
 
 				return m, nil
-
 			case "up":
 				m.table.MoveUp(1)
 				return m, nil

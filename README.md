@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/gorbang.jpg" alt="Gorbang" width="640">
+</p>
+
 # Gorbang
 
 The name **Gorbang** comes from the Indonesian word **"gerbang"**, meaning

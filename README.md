@@ -78,6 +78,19 @@ gorbang
 Search mode matches on PID, process name, and address. Press `esc` to clear the
 query and return to full list navigation.
 
+## Update
+
+```sh
+brew upgrade gorbang
+```
+
+if error
+
+```sh
+brew tap nnivxix/tap
+brew upgrade gorbang
+```
+
 ## License
 
 [MIT](LICENSE)

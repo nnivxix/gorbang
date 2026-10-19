@@ -217,7 +217,7 @@ func (m model) View() tea.View {
 	case m.searching:
 		footer = fmt.Sprintf("Search: %s\nPress [ESC] to exit search mode", m.search.Value()+" ")
 	default:
-		footer = "[R] Refresh\n[/] Search process\n[ESC, Q] Quit"
+		footer = "[R] Refresh\n[/] Search process\n[Enter] kill procces\n[ESC, Q] Quit"
 	}
 
 	v := tea.NewView(title + "\n\n" + body + "\n\n" + footer)

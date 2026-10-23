@@ -74,6 +74,7 @@ gorbang
 | `y`         | Confirm the kill                  |
 | `r`         | Refresh the process list          |
 | `q`         | Quit                              |
+| `c`         | View Changelog                    |
 
 Search mode matches on PID, process name, and address. Press `esc` to clear the
 query and return to full list navigation.

@@ -6,8 +6,16 @@ import (
 
 	"charm.land/bubbles/v2/table"
 	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+)
+
+type page int
+
+const (
+	pageMain page = iota
+	pageChangelog
 )
 
 type procsReloadedMsg struct{}
@@ -21,6 +29,8 @@ type model struct {
 	search     textinput.Model
 	searching  bool
 	rows       []table.Row
+	page       page
+	pager      viewport.Model
 }
 
 func initModel() model {
@@ -59,7 +69,11 @@ func initModel() model {
 	search.SetVirtualCursor(true)
 	search.CharLimit = 64
 
-	return model{table: t, err: nil, search: search, rows: rows}
+	pager := viewport.New()
+	pager.SoftWrap = true
+	pager.SetContent(changelogContent)
+
+	return model{table: t, err: nil, search: search, rows: rows, page: pageMain, pager: pager}
 }
 
 func (m model) Init() tea.Cmd {
@@ -85,8 +99,30 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.table.SetWidth(msg.Width)
 		m.table.SetHeight(h)
+		m.pager.SetWidth(max(1, msg.Width-2)) // -2 untuk border kiri/kanan
+		m.pager.SetHeight(max(1, msg.Height-10))
+
+	case tea.MouseClickMsg, tea.MouseReleaseMsg, tea.MouseWheelMsg, tea.MouseMotionMsg:
+		if m.page == pageChangelog {
+			m.pager, cmd = m.pager.Update(msg)
+			return m, cmd
+		}
 
 	case tea.KeyPressMsg:
+		if m.page == pageChangelog {
+			switch msg.String() {
+			case "m", "c":
+				m.page = pageMain
+				m.table.Focus()
+				return m, nil
+			case "q":
+				return m, tea.Quit
+			}
+
+			m.pager, cmd = m.pager.Update(msg)
+			return m, cmd
+		}
+
 		if m.confirming {
 			switch msg.String() {
 			case "y", "enter":
@@ -190,7 +226,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.table.SetRows(filterRows(rows, m.search.Value()))
 
 			return m, nil
-
+		case "c", "C":
+			m.page = pageChangelog
+			m.table.Blur()
+			m.pager.GotoTop()
+			return m, nil
 		}
 	}
 
@@ -205,6 +245,9 @@ func (m model) View() tea.View {
 		v.AltScreen = true
 		return v
 	}
+	if m.page == pageChangelog {
+		return m.changelogView()
+	}
 	title := lipgloss.NewStyle().Bold(true).Render("Gorbang - Listening ports")
 	body := lipgloss.NewStyle().
 		BorderStyle(lipgloss.NormalBorder()).
@@ -217,11 +260,28 @@ func (m model) View() tea.View {
 	case m.searching:
 		footer = fmt.Sprintf("Search: %s\nPress [ESC] to exit search mode", m.search.Value()+" ")
 	default:
-		footer = "[R] Refresh\n[/] Search process\n[Enter] kill procces\n[ESC, Q] Quit"
+		footer = "[R] Refresh\n[/] Search process\n[C] to see Changelog version\n[Enter] kill procces\n[ESC, Q] Quit"
 	}
 
 	v := tea.NewView(title + "\n\n" + body + "\n\n" + footer)
 	v.AltScreen = true
 
+	return v
+}
+
+func (m model) changelogView() tea.View {
+	title := lipgloss.NewStyle().Bold(true).Render("Gorbang - Changelog")
+	body := lipgloss.NewStyle().
+		BorderStyle(lipgloss.NormalBorder()).
+		Render(m.pager.View())
+	footer := fmt.Sprintf(
+		"[Space/F] Page down\n[B] Page up  [G/G] Top/Bottom\n"+
+			"[M] Back to main\n[Q] Quit App - (%3.f%%)",
+		m.pager.ScrollPercent()*100,
+	)
+
+	v := tea.NewView(title + "\n\n" + body + "\n\n" + footer)
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion // hanya di halaman ini
 	return v
 }

@@ -117,6 +117,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case "q":
 				return m, tea.Quit
+			case "g":
+				m.pager.GotoTop()
+				return m, nil
+			case "G":
+				m.pager.GotoBottom()
+				return m, nil
 			}
 
 			m.pager, cmd = m.pager.Update(msg)
@@ -275,7 +281,7 @@ func (m model) changelogView() tea.View {
 		BorderStyle(lipgloss.NormalBorder()).
 		Render(m.pager.View())
 	footer := fmt.Sprintf(
-		"[Space/F] Page down\n[B] Page up  [G/G] Top/Bottom\n"+
+		"[Space/F] Page down\n[B] Page up\n[G/G+shift] Top/Bottom\n"+
 			"[M] Back to main\n[Q] Quit App - (%3.f%%)",
 		m.pager.ScrollPercent()*100,
 	)

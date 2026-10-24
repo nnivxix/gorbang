@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0]
+
+- Add built-in changelog viewer (`c`) with scrollable viewport and mouse support
+- Add `g` / `G` to jump to the top / bottom of the changelog
+- Add `m` to return to the main view from the changelog
+- Add `[c]` and `[enter]` hints to the footer
+- Add Homebrew upgrade instructions to README
+
 ## [0.5.1]
 
 - Add `[enter]` hint in footer

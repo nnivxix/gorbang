@@ -82,7 +82,7 @@ query and return to full list navigation.
 ## Update
 
 ```sh
-brew upgrade gorbang
+brew update && brew upgrade gorbang
 ```
 
 if error

@@ -172,6 +172,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.table.Focus()
 				return m, killProc(m.targetPID, m.targetSupervisor, killForced)
 			case "up":
+				m.targetSupervisor = 0
+				m.targetSupervisorName = ""
+				m.killFailed = false
 				m.confirming = false
 				m.table.MoveUp(1)
 				if m.searching == false {
@@ -181,6 +184,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			case "down":
+				m.targetSupervisor = 0
+				m.targetSupervisorName = ""
+				m.killFailed = false
 				m.confirming = false
 				m.table.MoveDown(1)
 				if m.searching == false {
@@ -201,6 +207,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if m.searching {
 			switch msg.String() {
+			case "ctrl+r":
+				procs := listProcs()
+				rows := procsToRows(procs)
+				m.rows = rows
+				m.table.SetRows(filterRows(rows, m.search.Value()))
+
+				return m, nil
 			case "esc":
 				m.searching = false
 				m.search.Reset()
@@ -224,6 +237,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.confirming = true
 				m.targetPID = pid
 				m.targetName = row[1]
+				m.targetSupervisor, m.targetSupervisorName = supervisorOf(pid) // ← present here
+				m.killFailed = false
 
 				return m, nil
 			case "up":
@@ -318,7 +333,7 @@ func (m model) View() tea.View {
 		footer = fmt.Sprintf("Kill %s (PID %d)?\n[y] Graceful (SIGTERM)   [f] Force kill (SIGKILL)   [esc] Cancel",
 			m.targetName, m.targetPID)
 	case m.searching:
-		footer = fmt.Sprintf("Search: %s\nPress [ESC] to exit search mode", m.search.Value()+" ")
+		footer = fmt.Sprintf("Search: %s\n[ctrl+r] Refresh\n[ESC] to exit search mode", m.search.Value()+" ")
 	default:
 		footer = "[R] Refresh\n[/] Search process\n[C] to see Changelog version\n[Enter] kill · [Y] graceful · [F] force\n[ESC, Q] Quit"
 	}

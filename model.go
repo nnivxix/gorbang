@@ -20,17 +20,26 @@ const (
 
 type procsReloadedMsg struct{}
 
+type killDoneMsg struct {
+	alive bool
+}
+
 type model struct {
-	table      table.Model
-	err        error
-	confirming bool
-	targetPID  int
-	targetName string
-	search     textinput.Model
-	searching  bool
-	rows       []table.Row
-	page       page
-	pager      viewport.Model
+	table                table.Model
+	err                  error
+	confirming           bool
+	targetPID            int
+	targetName           string
+	targetSupervisor     int
+	targetSupervisorName string
+	killing              bool
+	killFailed           bool
+	killMode             killMode
+	search               textinput.Model
+	searching            bool
+	rows                 []table.Row
+	page                 page
+	pager                viewport.Model
 }
 
 func initModel() model {
@@ -84,12 +93,26 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
-	case procsReloadedMsg:
+	case killDoneMsg:
+		m.killing = false
+
+		if msg.alive {
+			m.confirming = true
+			m.killFailed = true
+
+			return m, nil
+		}
+
 		procs := listProcs()
 		rows := procsToRows(procs)
 		m.rows = rows
 		m.table.SetRows(filterRows(rows, m.search.Value()))
 		m.table.SetCursor(0)
+		m.confirming = false
+		m.killFailed = false
+		m.targetPID = 0
+		m.targetSupervisor = 0
+		m.targetSupervisorName = ""
 
 		return m, nil
 	case tea.WindowSizeMsg:
@@ -109,6 +132,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.KeyPressMsg:
+		if m.killing {
+			return m, nil
+		}
 		if m.page == pageChangelog {
 			switch msg.String() {
 			case "m", "c":
@@ -133,9 +159,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "y", "enter":
 				m.confirming = false
+				m.killFailed = false
+				m.killing = true
+				m.killMode = killGraceful
 				m.table.Focus()
-				return m, killProc(m.targetPID)
+				return m, killProc(m.targetPID, m.targetSupervisor, killGraceful)
+			case "f":
+				m.confirming = false
+				m.killFailed = false
+				m.killing = true
+				m.killMode = killForced
+				m.table.Focus()
+				return m, killProc(m.targetPID, m.targetSupervisor, killForced)
 			case "up":
+				m.targetSupervisor = 0
+				m.targetSupervisorName = ""
+				m.killFailed = false
 				m.confirming = false
 				m.table.MoveUp(1)
 				if m.searching == false {
@@ -145,6 +184,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			case "down":
+				m.targetSupervisor = 0
+				m.targetSupervisorName = ""
+				m.killFailed = false
 				m.confirming = false
 				m.table.MoveDown(1)
 				if m.searching == false {
@@ -156,12 +198,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			default:
 				m.confirming = false
 				m.searching = false
+				m.killFailed = false
+				m.targetSupervisor = 0
+				m.targetSupervisorName = ""
 				return m, nil
 			}
 		}
 
 		if m.searching {
 			switch msg.String() {
+			case "ctrl+r":
+				procs := listProcs()
+				rows := procsToRows(procs)
+				m.rows = rows
+				m.table.SetRows(filterRows(rows, m.search.Value()))
+
+				return m, nil
 			case "esc":
 				m.searching = false
 				m.search.Reset()
@@ -185,6 +237,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.confirming = true
 				m.targetPID = pid
 				m.targetName = row[1]
+				m.targetSupervisor, m.targetSupervisorName = supervisorOf(pid) // ← present here
+				m.killFailed = false
 
 				return m, nil
 			case "up":
@@ -218,6 +272,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.confirming = true
 			m.targetPID = pid
 			m.targetName = row[1]
+			m.targetSupervisor, m.targetSupervisorName = supervisorOf(pid)
+			m.killFailed = false
 			return m, nil
 		case "/":
 			m.searching = true
@@ -261,12 +317,25 @@ func (m model) View() tea.View {
 	footer := ""
 
 	switch {
+	case m.killing:
+		// Kill is async and can take up to ~2s on the graceful path; without
+		// this the app looks frozen after pressing [y].
+		footer = fmt.Sprintf("Killing PID %d with SIG%s... please wait", m.targetPID, m.killMode.signalName())
+	case m.confirming && m.killFailed:
+		// Graceful attempt failed: stay armed so [f] is one keypress away.
+		footer = fmt.Sprintf("PID %d still running after SIGTERM.\n[y] Retry   [f] Force kill (SIGKILL)   [esc] Cancel", m.targetPID)
+	case m.confirming && m.targetSupervisor > 0:
+		// Name the supervisor: this is the process that would respawn the
+		// listener on port+1, so the user should see it before confirming.
+		footer = fmt.Sprintf("Kill %s (PID %d) + parent %s (PID %d)?\n[y] Graceful (SIGTERM)   [f] Force kill (SIGKILL)   [esc] Cancel",
+			m.targetName, m.targetPID, m.targetSupervisorName, m.targetSupervisor)
 	case m.confirming:
-		footer = fmt.Sprintf("\n Kill %s (PID %d)? [y] Yes", m.targetName, m.targetPID)
+		footer = fmt.Sprintf("Kill %s (PID %d)?\n[y] Graceful (SIGTERM)   [f] Force kill (SIGKILL)   [esc] Cancel",
+			m.targetName, m.targetPID)
 	case m.searching:
-		footer = fmt.Sprintf("Search: %s\nPress [ESC] to exit search mode", m.search.Value()+" ")
+		footer = fmt.Sprintf("Search: %s\n[ctrl+r] Refresh\n[ESC] to exit search mode", m.search.Value()+" ")
 	default:
-		footer = "[R] Refresh\n[/] Search process\n[C] to see Changelog version\n[Enter] kill procces\n[ESC, Q] Quit"
+		footer = "[R] Refresh\n[/] Search process\n[C] to see Changelog version\n[Enter] kill · [Y] graceful · [F] force\n[ESC, Q] Quit"
 	}
 
 	v := tea.NewView(title + "\n\n" + body + "\n\n" + footer)

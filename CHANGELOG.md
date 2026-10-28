@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.6.0]
+
+- Kill the supervising dev process instead of only the port holder
+- Add `[y]` graceful (`SIGTERM`) and `[f]` force (`SIGKILL`) kill options
+- Verify the process is gone before refreshing the list
+
 ## [0.5.1]
 
 - Add `[enter]` hint in footer

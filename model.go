@@ -20,17 +20,26 @@ const (
 
 type procsReloadedMsg struct{}
 
+type killDoneMsg struct {
+	alive bool
+}
+
 type model struct {
-	table      table.Model
-	err        error
-	confirming bool
-	targetPID  int
-	targetName string
-	search     textinput.Model
-	searching  bool
-	rows       []table.Row
-	page       page
-	pager      viewport.Model
+	table                table.Model
+	err                  error
+	confirming           bool
+	targetPID            int
+	targetName           string
+	targetSupervisor     int
+	targetSupervisorName string
+	killing              bool
+	killFailed           bool
+	killMode             killMode
+	search               textinput.Model
+	searching            bool
+	rows                 []table.Row
+	page                 page
+	pager                viewport.Model
 }
 
 func initModel() model {
@@ -84,12 +93,26 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
-	case procsReloadedMsg:
+	case killDoneMsg:
+		m.killing = false
+
+		if msg.alive {
+			m.confirming = true
+			m.killFailed = true
+
+			return m, nil
+		}
+
 		procs := listProcs()
 		rows := procsToRows(procs)
 		m.rows = rows
 		m.table.SetRows(filterRows(rows, m.search.Value()))
 		m.table.SetCursor(0)
+		m.confirming = false
+		m.killFailed = false
+		m.targetPID = 0
+		m.targetSupervisor = 0
+		m.targetSupervisorName = ""
 
 		return m, nil
 	case tea.WindowSizeMsg:
@@ -109,6 +132,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.KeyPressMsg:
+		if m.killing {
+			return m, nil
+		}
 		if m.page == pageChangelog {
 			switch msg.String() {
 			case "m", "c":
@@ -133,8 +159,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "y", "enter":
 				m.confirming = false
+				m.killFailed = false
+				m.killing = true
+				m.killMode = killGraceful
 				m.table.Focus()
-				return m, killProc(m.targetPID)
+				return m, killProc(m.targetPID, m.targetSupervisor, killGraceful)
+			case "f":
+				m.confirming = false
+				m.killFailed = false
+				m.killing = true
+				m.killMode = killForced
+				m.table.Focus()
+				return m, killProc(m.targetPID, m.targetSupervisor, killForced)
 			case "up":
 				m.confirming = false
 				m.table.MoveUp(1)
@@ -156,6 +192,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			default:
 				m.confirming = false
 				m.searching = false
+				m.killFailed = false
+				m.targetSupervisor = 0
+				m.targetSupervisorName = ""
 				return m, nil
 			}
 		}

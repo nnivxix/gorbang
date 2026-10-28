@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/table"
 	tea "charm.land/bubbletea/v2"
@@ -21,12 +22,12 @@ type Proc struct {
 type killMode int
 
 const (
-	killGracefuk killMode = iota
-	killForce
+	killGraceful killMode = iota
+	killForced
 )
 
 func (m killMode) signalName() string {
-	if m == killForce {
+	if m == killForced {
 		return "KILL"
 	}
 	return "TERM"
@@ -153,7 +154,41 @@ func supervisorOf(pid int) (int, string) {
 	return 0, ""
 }
 
-// continue section 5
+// return every dencendant of root using ONE `ps` snapshot.
+func procTree(root int) []int {
+	out, err := exec.Command("ps", "-Ao", "pid=,ppid=").Output()
+
+	if err != nil {
+		return nil
+	}
+	children := make(map[int][]int)
+	for _, line := range strings.Split(string(out), "\n") {
+		f := strings.Fields(line)
+		if len(f) != 2 { // why 2?
+			continue
+		}
+
+		child, err1 := strconv.Atoi(f[0])
+		parent, err2 := strconv.Atoi(f[1])
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		children[parent] = append(children[parent], child)
+	}
+	var result []int
+
+	queue := []int{root}
+	for len(queue) > 0 {
+		pid := queue[0]
+		queue = queue[1:]
+		for _, c := range children[pid] {
+			result = append(result, c)
+			queue = append(queue, c)
+		}
+	}
+	return result
+}
+
 func procsToRows(procs []Proc) []table.Row {
 	rows := make([]table.Row, 0, len(procs))
 	for _, p := range procs {
@@ -166,9 +201,83 @@ func procsToRows(procs []Proc) []table.Row {
 	return rows
 }
 
-func killProc(pid int) tea.Cmd {
+func killProc(pid int, supervisor int, mode killMode) tea.Cmd {
 	return func() tea.Msg {
-		_ = exec.Command("kill", strconv.Itoa(pid)).Run()
-		return procsReloadedMsg{}
+		var targets []int
+
+		if mode == killForced {
+			tree := []int{}
+			// Snapshot the tree BEFORE any signal: once the parent dies its
+			// children are reparented to PID 1 and become unreachable here.
+			if supervisor > 0 {
+				tree = procTree(supervisor)
+			}
+
+			// Kill the supervisor first so it cannot fork/respawn between
+			// signals, then sweep its descendants and the listener.
+			if supervisor > 0 {
+				signal(supervisor, mode)
+			}
+
+			for _, p := range tree {
+				signal(p, mode)
+			}
+
+			if pid != supervisor {
+				signal(pid, mode)
+			}
+
+			targets = append([]int{pid}, tree...) // tree... ?
+			if supervisor > 0 {
+				targets = append(targets, supervisor)
+			}
+		} else {
+			target := pid
+			if supervisor > 0 {
+				target = supervisor
+			}
+			signal(target, mode)
+
+			targets = []int{pid}
+			if supervisor > 0 {
+				targets = append(targets, supervisor)
+			}
+		}
+		// Always verify instead of trusting `kill`: the old code reloaded
+		// immediately, so a dying or respawned process showed up as "still there".
+		timeout := 2 * time.Second
+		if mode == killForced {
+			timeout = 500 * time.Millisecond //  SIGKILL is immediate; no need to wait long
+		}
+
+		return killDoneMsg{alive: !waitAllGone(targets, timeout)}
+	}
+}
+
+// signal shells out to /bin/kill, matching the existing style (no syscall import).
+func signal(pid int, mode killMode) {
+	_ = exec.Command("kill", "-"+mode.signalName(), strconv.Itoa(pid)).Run()
+}
+
+// waitAllGone polls until every pid is gone, or the timeout elapses.
+// 50ms keeps the UI responsive while avoiding a busy loop.
+func waitAllGone(pids []int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+
+	for {
+		alive := false
+		for _, p := range pids {
+			if pidAlive(p) {
+				alive = true
+				break
+			}
+		}
+		if !alive {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }

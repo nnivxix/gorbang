@@ -257,6 +257,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.confirming = true
 			m.targetPID = pid
 			m.targetName = row[1]
+			m.targetSupervisor, m.targetSupervisorName = supervisorOf(pid)
+			m.killFailed = false
 			return m, nil
 		case "/":
 			m.searching = true
@@ -300,12 +302,25 @@ func (m model) View() tea.View {
 	footer := ""
 
 	switch {
+	case m.killing:
+		// Kill is async and can take up to ~2s on the graceful path; without
+		// this the app looks frozen after pressing [y].
+		footer = fmt.Sprintf("Killing PID %d with SIG%s... please wait", m.targetPID, m.killMode.signalName())
+	case m.confirming && m.killFailed:
+		// Graceful attempt failed: stay armed so [f] is one keypress away.
+		footer = fmt.Sprintf("PID %d still running after SIGTERM.\n[y] Retry   [f] Force kill (SIGKILL)   [esc] Cancel", m.targetPID)
+	case m.confirming && m.targetSupervisor > 0:
+		// Name the supervisor: this is the process that would respawn the
+		// listener on port+1, so the user should see it before confirming.
+		footer = fmt.Sprintf("Kill %s (PID %d) + parent %s (PID %d)?\n[y] Graceful (SIGTERM)   [f] Force kill (SIGKILL)   [esc] Cancel",
+			m.targetName, m.targetPID, m.targetSupervisorName, m.targetSupervisor)
 	case m.confirming:
-		footer = fmt.Sprintf("\n Kill %s (PID %d)? [y] Yes", m.targetName, m.targetPID)
+		footer = fmt.Sprintf("Kill %s (PID %d)?\n[y] Graceful (SIGTERM)   [f] Force kill (SIGKILL)   [esc] Cancel",
+			m.targetName, m.targetPID)
 	case m.searching:
 		footer = fmt.Sprintf("Search: %s\nPress [ESC] to exit search mode", m.search.Value()+" ")
 	default:
-		footer = "[R] Refresh\n[/] Search process\n[C] to see Changelog version\n[Enter] kill procces\n[ESC, Q] Quit"
+		footer = "[R] Refresh\n[/] Search process\n[C] to see Changelog version\n[Enter] kill · [Y] graceful · [F] force\n[ESC, Q] Quit"
 	}
 
 	v := tea.NewView(title + "\n\n" + body + "\n\n" + footer)

@@ -71,7 +71,8 @@ gorbang
 | `up` / `k`  | Move selection up                 |
 | `down` / `j`| Move selection down               |
 | `enter`     | Arm kill for the selected process |
-| `y`         | Confirm the kill                  |
+| `y`         | Graceful kill (`SIGTERM`)         |
+| `f`         | Force kill (`SIGKILL`)            |
 | `r`         | Refresh the process list          |
 | `q`         | Quit                              |
 | `c`         | View Changelog                    |

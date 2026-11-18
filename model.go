@@ -74,7 +74,6 @@ func initModel() model {
 	search := textinput.New()
 
 	search.Placeholder = "Search port / name / PID"
-	search.Prompt = " / "
 	search.SetVirtualCursor(true)
 	search.CharLimit = 64
 	search.Focus()

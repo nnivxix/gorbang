@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"strconv"
+	"time"
 
+	"charm.land/bubbles/v2/cursor"
 	"charm.land/bubbles/v2/table"
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
@@ -78,6 +80,13 @@ func initModel() model {
 	search.CharLimit = 64
 	search.Focus()
 	search.SetWidth(40)
+
+	styles := search.Styles()
+	styles.Cursor.Blink = true
+	styles.Cursor.BlinkSpeed = 500 * time.Millisecond
+	styles.Cursor.Color = lipgloss.Color("7")
+	styles.Cursor.Shape = tea.CursorBlock
+	search.SetStyles(styles)
 
 	pager := viewport.New()
 	pager.SoftWrap = true
@@ -301,6 +310,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pager.GotoTop()
 			return m, nil
 		}
+
+	case cursor.BlinkMsg:
+		if !m.searching {
+			return m, nil
+		}
+		var blinkCmd tea.Cmd
+		m.search, blinkCmd = m.search.Update(msg)
+		return m, blinkCmd
+
 	}
 
 	m.table, cmd = m.table.Update(msg)

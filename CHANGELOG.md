@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.8.0]
+
+- Add wrap-around navigation with `up` / `down` in both normal and search mode
+- Move the search input into a bordered box with a blinking block cursor
+
 ## [0.7.0]
 
 - Kill the supervising dev process instead of only the port holder

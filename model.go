@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"strconv"
+	"time"
 
+	"charm.land/bubbles/v2/cursor"
 	"charm.land/bubbles/v2/table"
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
@@ -74,9 +76,17 @@ func initModel() model {
 	search := textinput.New()
 
 	search.Placeholder = "Search port / name / PID"
-	search.Prompt = " / "
 	search.SetVirtualCursor(true)
 	search.CharLimit = 64
+	search.Focus()
+	search.SetWidth(40)
+
+	styles := search.Styles()
+	styles.Cursor.Blink = true
+	styles.Cursor.BlinkSpeed = 500 * time.Millisecond
+	styles.Cursor.Color = lipgloss.Color("7")
+	styles.Cursor.Shape = tea.CursorBlock
+	search.SetStyles(styles)
 
 	pager := viewport.New()
 	pager.SoftWrap = true
@@ -242,10 +252,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				return m, nil
 			case "up":
-				m.table.MoveUp(1)
+				m.moveUp()
 				return m, nil
 			case "down":
-				m.table.MoveDown(1)
+				m.moveDown()
 				return m, nil
 			}
 
@@ -258,6 +268,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch msg.String() {
+		case "up":
+			m.moveUp()
+			return m, nil
+		case "down":
+			m.moveDown()
+			return m, nil
 		case "enter":
 			row := m.table.SelectedRow()
 			if row == nil {
@@ -294,6 +310,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pager.GotoTop()
 			return m, nil
 		}
+
+	case cursor.BlinkMsg:
+		if !m.searching {
+			return m, nil
+		}
+		var blinkCmd tea.Cmd
+		m.search, blinkCmd = m.search.Update(msg)
+		return m, blinkCmd
+
 	}
 
 	m.table, cmd = m.table.Update(msg)
@@ -314,6 +339,13 @@ func (m model) View() tea.View {
 	body := lipgloss.NewStyle().
 		BorderStyle(lipgloss.NormalBorder()).
 		Render(m.table.View())
+	searchBox := lipgloss.NewStyle().
+		BorderForeground(lipgloss.Color("240")).
+		BorderStyle(lipgloss.NormalBorder()).
+		Width(max(1, m.table.Width()-4)).
+		Padding(0, 1).
+		Render(m.search.View())
+
 	footer := ""
 
 	switch {
@@ -333,7 +365,7 @@ func (m model) View() tea.View {
 		footer = fmt.Sprintf("Kill %s (PID %d)?\n[y] Graceful (SIGTERM)   [f] Force kill (SIGKILL)   [esc] Cancel",
 			m.targetName, m.targetPID)
 	case m.searching:
-		footer = fmt.Sprintf("Search: %s\n[ctrl+r] Refresh\n[ESC] to exit search mode", m.search.Value()+" ")
+		footer = fmt.Sprintf("%s\n[ctrl+r] Refresh\n[ESC] to exit search mode", searchBox)
 	default:
 		footer = "[R] Refresh\n[/] Search process\n[C] to see Changelog version\n[Enter] kill · [Y] graceful · [F] force\n[ESC, Q] Quit"
 	}
@@ -359,4 +391,27 @@ func (m model) changelogView() tea.View {
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion // hanya di halaman ini
 	return v
+}
+
+func (m *model) moveUp() {
+	if len(m.table.Rows()) == 0 {
+		return
+	}
+	if m.table.Cursor() <= 0 {
+		m.table.GotoBottom()
+		return
+	}
+	m.table.MoveUp(1)
+}
+
+func (m *model) moveDown() {
+	n := len(m.table.Rows())
+	if n == 0 {
+		return
+	}
+	if m.table.Cursor() >= n-1 {
+		m.table.GotoTop()
+		return
+	}
+	m.table.MoveDown(1)
 }

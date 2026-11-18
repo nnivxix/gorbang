@@ -77,6 +77,8 @@ func initModel() model {
 	search.Prompt = " / "
 	search.SetVirtualCursor(true)
 	search.CharLimit = 64
+	search.Focus()
+	search.SetWidth(40)
 
 	pager := viewport.New()
 	pager.SoftWrap = true
@@ -320,6 +322,13 @@ func (m model) View() tea.View {
 	body := lipgloss.NewStyle().
 		BorderStyle(lipgloss.NormalBorder()).
 		Render(m.table.View())
+	searchBox := lipgloss.NewStyle().
+		BorderForeground(lipgloss.Color("240")).
+		BorderStyle(lipgloss.NormalBorder()).
+		Width(max(1, m.table.Width()-4)).
+		Padding(0, 1).
+		Render(m.search.View())
+
 	footer := ""
 
 	switch {
@@ -339,7 +348,7 @@ func (m model) View() tea.View {
 		footer = fmt.Sprintf("Kill %s (PID %d)?\n[y] Graceful (SIGTERM)   [f] Force kill (SIGKILL)   [esc] Cancel",
 			m.targetName, m.targetPID)
 	case m.searching:
-		footer = fmt.Sprintf("Search: %s\n[ctrl+r] Refresh\n[ESC] to exit search mode", m.search.Value()+" ")
+		footer = fmt.Sprintf("%s\n[ctrl+r] Refresh\n[ESC] to exit search mode", searchBox)
 	default:
 		footer = "[R] Refresh\n[/] Search process\n[C] to see Changelog version\n[Enter] kill · [Y] graceful · [F] force\n[ESC, Q] Quit"
 	}

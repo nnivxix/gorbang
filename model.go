@@ -242,10 +242,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				return m, nil
 			case "up":
-				m.table.MoveUp(1)
+				m.moveUp()
 				return m, nil
 			case "down":
-				m.table.MoveDown(1)
+				m.moveDown()
 				return m, nil
 			}
 
@@ -258,6 +258,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch msg.String() {
+		case "up":
+			m.moveUp()
+			return m, nil
+		case "down":
+			m.moveDown()
+			return m, nil
 		case "enter":
 			row := m.table.SelectedRow()
 			if row == nil {
@@ -359,4 +365,27 @@ func (m model) changelogView() tea.View {
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion // hanya di halaman ini
 	return v
+}
+
+func (m *model) moveUp() {
+	if len(m.table.Rows()) == 0 {
+		return
+	}
+	if m.table.Cursor() <= 0 {
+		m.table.GotoBottom()
+		return
+	}
+	m.table.MoveUp(1)
+}
+
+func (m *model) moveDown() {
+	n := len(m.table.Rows())
+	if n == 0 {
+		return
+	}
+	if m.table.Cursor() >= n-1 {
+		m.table.GotoTop()
+		return
+	}
+	m.table.MoveDown(1)
 }
